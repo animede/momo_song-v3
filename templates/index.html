@@ -266,17 +266,57 @@ function getImageSizeParams() {
       // 2. 自動生成用のタイマー・状態管理
       let autoGenerateEnabled = false;
       let lastUserAction = Date.now(); // ←ここを修正
-      const AUTO_GENERATE_IDLE = 60000;     // 120秒間操作がなければ発動
+      const AUTO_GENERATE_IDLE = 60000;     // 60秒間操作がなければ発動
+      
+      // エラー回復機能用の変数
+      let consecutiveErrors = 0;           // 連続エラー回数
+      const MAX_CONSECUTIVE_ERRORS = 3;    // 最大連続エラー回数
+      const ERROR_RETRY_DELAY = 10000;     // エラー後のリトライ間隔（10秒）
+      let isInErrorRecovery = false;       // エラー回復モード中フラグ
 
       const autoGenerateChk = document.getElementById('auto_generate_chk');
 
       let isAutoGenerating = false;
 
-      // 3. generateBtnクリック関数をラップ
+      // 3. generateBtnクリック関数をラップ（エラー回復機能付き）
       async function triggerGenerate() {
         if (isGenerating) return; // 生成中はスキップ
+        
+        // 連続エラーが最大値を超えた場合は自動生成を停止
+        if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+          console.warn(`連続エラーが${MAX_CONSECUTIVE_ERRORS}回発生したため自動生成を停止します`);
+          updateStatus(`連続エラーにより自動生成を停止しました（${consecutiveErrors}回）`);
+          autoGenerateChk.checked = false;
+          disableAutoGenerate();
+          return;
+        }
+        
         isAutoGenerating = true;
         generateBtn.click();
+      }
+
+      // エラー回復のためのリトライ機能
+      function scheduleErrorRecovery() {
+        if (!autoGenerateEnabled) return;
+        
+        isInErrorRecovery = true;
+        updateStatus(`エラー回復中... ${ERROR_RETRY_DELAY/1000}秒後にリトライします`);
+        
+        setTimeout(() => {
+          if (autoGenerateEnabled && !isGenerating) {
+            console.log(`エラー回復リトライ実行（連続エラー数: ${consecutiveErrors}）`);
+            isInErrorRecovery = false;
+            triggerGenerate();
+          }
+        }, ERROR_RETRY_DELAY);
+      }
+
+      // 生成成功時のエラーカウンターリセット
+      function resetErrorCounter() {
+        if (consecutiveErrors > 0) {
+          console.log(`エラーカウンターをリセット（前回: ${consecutiveErrors}回）`);
+          consecutiveErrors = 0;
+        }
       }
 
       // 4. 自動生成の有効化・無効化
@@ -306,6 +346,9 @@ function getImageSizeParams() {
           if (autoGenerateEnabled) {
             autoGenerateChk.checked = false;
             disableAutoGenerate();
+            // ユーザー操作時にエラーカウンターもリセット
+            resetErrorCounter();
+            isInErrorRecovery = false;
           }
         }, true);
       });
@@ -316,9 +359,12 @@ function getImageSizeParams() {
         console.log("playQueue.length =", playQueue.length);
         console.log("autoGenerateEnabled=", autoGenerateEnabled);
         console.log("lastUserAction=", lastUserAction);
+        console.log("consecutiveErrors=", consecutiveErrors);
+        console.log("isInErrorRecovery=", isInErrorRecovery);
 
         if (
           autoGenerateEnabled &&
+          !isInErrorRecovery &&  // エラー回復中でない
           Date.now() - lastUserAction >= AUTO_GENERATE_IDLE &&
           playQueue.length === 0 // キューが空のときのみ自動生成
         ) {
@@ -374,12 +420,27 @@ function getImageSizeParams() {
           try {
             const response = await fetch('/generate_lyrics', { method: 'POST', body: formData0 });
           if (!response.ok) {
-              statusEl.textContent = `作詞・曲データ作成に失敗しました。言葉を変えて再度お試しください。`;
-              spinner.style.display = 'none';
-              error=true;
-              isGenerating = false;
-              isAutoGenerating = false;
-              return}
+              consecutiveErrors++;
+              console.error(`作詞エラー（連続${consecutiveErrors}回目）:`, response.status, response.statusText);
+              
+              if (isAutoGenerating) {
+                // 自動生成モード時はエラー回復を試行
+                spinner.style.display = 'none';
+                statusEl.style.display = 'none';
+                isGenerating = false;
+                isAutoGenerating = false;
+                scheduleErrorRecovery();
+                return;
+              } else {
+                // 手動生成時は従来通りエラー表示
+                statusEl.textContent = `作詞・曲データ作成に失敗しました。言葉を変えて再度お試しください。`;
+                spinner.style.display = 'none';
+                error=true;
+                isGenerating = false;
+                isAutoGenerating = false;
+                return;
+              }
+            }
 
           else {
               error=false;
@@ -390,11 +451,25 @@ function getImageSizeParams() {
           console.log("data_music_world=", data_music_world);
           lyrics_dict = JSON.stringify(data.lyrics_dict);
                   } catch (err) {
-            alert(err.message);
-            error=true
-            isGenerating = false;
-            isAutoGenerating = false; // ★ここで必ずリセット
-            return;
+            consecutiveErrors++;
+            console.error(`作詞処理エラー（連続${consecutiveErrors}回目）:`, err);
+            
+            if (isAutoGenerating) {
+              // 自動生成モード時はエラー回復を試行
+              spinner.style.display = 'none';
+              statusEl.style.display = 'none';
+              isGenerating = false;
+              isAutoGenerating = false;
+              scheduleErrorRecovery();
+              return;
+            } else {
+              // 手動生成時は従来通りエラー表示
+              alert(err.message);
+              error=true;
+              isGenerating = false;
+              isAutoGenerating = false; // ★ここで必ずリセット
+              return;
+            }
           }
           console.log("lyrics_dict=", lyrics_dict);
           const lyrics_dict_js = JSON.parse(lyrics_dict);
@@ -408,12 +483,26 @@ function getImageSizeParams() {
           const lyricsL_txt_lines = lyrics_Text.split('\n').map(line => line.trim()).filter(line => line);
           console.log("lyricsL_txt_lines=", lyricsL_txt_lines);
           if (lyricsL_txt_lines[0].length === 1) {
-            statusEl.textContent = `歌詞が生成されませんでした。言葉を変えて再度お試しください。`;
-            spinner.style.display = 'none';
-            error=true
-            isGenerating = false;
-            isAutoGenerating = false; // ★ここで必ずリセット
-            return;
+            consecutiveErrors++;
+            console.error(`歌詞生成不良（連続${consecutiveErrors}回目）: 歌詞が短すぎます`);
+            
+            if (isAutoGenerating) {
+              // 自動生成モード時はエラー回復を試行
+              spinner.style.display = 'none';
+              statusEl.style.display = 'none';
+              isGenerating = false;
+              isAutoGenerating = false;
+              scheduleErrorRecovery();
+              return;
+            } else {
+              // 手動生成時は従来通りエラー表示
+              statusEl.textContent = `歌詞が生成されませんでした。言葉を変えて再度お試しください。`;
+              spinner.style.display = 'none';
+              error=true;
+              isGenerating = false;
+              isAutoGenerating = false; // ★ここで必ずリセット
+              return;
+            }
           }
           // 自動生成時は歌詞・タイトル・説明文のHTML書き込みをスキップ
           if (!isAutoGenerating) {
@@ -458,18 +547,36 @@ function getImageSizeParams() {
           try {
             const response = await fetch('/generate_music', { method: 'POST', body: formData });
             if (!response.ok) {
-              statusEl.textContent = `作曲に失敗しました。言葉を変えて再度お試しください。`;
-              spinner.style.display = 'none';
-              error=true
-              isGenerating = false;
-              isAutoGenerating = false;
-              return
+              consecutiveErrors++;
+              console.error(`音楽・画像生成エラー（連続${consecutiveErrors}回目）:`, response.status, response.statusText);
+              
+              if (isAutoGenerating) {
+                // 自動生成モード時はエラー回復を試行
+                spinner.style.display = 'none';
+                statusEl.style.display = 'none';
+                isGenerating = false;
+                isAutoGenerating = false;
+                scheduleErrorRecovery();
+                return;
+              } else {
+                // 手動生成時は従来通りエラー表示
+                statusEl.textContent = `作曲に失敗しました。言葉を変えて再度お試しください。`;
+                spinner.style.display = 'none';
+                error=true;
+                isGenerating = false;
+                isAutoGenerating = false;
+                return;
+              }
             }
             const data = await response.json();
             const lyrics_json_list = parseToList(data.lyrics_json);
             const titleText = lyrics_json_list[0].value;
             const sections = Object.values(lyrics_json_list[1].value);
             const plainText = sections.join('\n\n');
+            
+            // 生成成功時にエラーカウンターをリセット
+            resetErrorCounter();
+            
             // スピナーを隠す・ステータスも隠す
             spinner.style.display = 'none';
             statusEl.style.display = 'none';
@@ -484,12 +591,25 @@ function getImageSizeParams() {
             });
 
         } catch (err) {
-          alert(err.message);
-          updateStatus('作曲が上手くできませんでした。言葉を変えて再度お試しください。');
-          spinner.style.display = 'none';
-          isGenerating = false;
-          isAutoGenerating = false; // ★ここで必ずリセット
-          error=true
+          consecutiveErrors++;
+          console.error(`音楽・画像生成処理エラー（連続${consecutiveErrors}回目）:`, err);
+          
+          if (isAutoGenerating) {
+            // 自動生成モード時はエラー回復を試行
+            spinner.style.display = 'none';
+            statusEl.style.display = 'none';
+            isGenerating = false;
+            isAutoGenerating = false;
+            scheduleErrorRecovery();
+          } else {
+            // 手動生成時は従来通りエラー表示
+            alert(err.message);
+            updateStatus('作曲が上手くできませんでした。言葉を変えて再度お試しください。');
+            spinner.style.display = 'none';
+            isGenerating = false;
+            isAutoGenerating = false; // ★ここで必ずリセット
+          }
+          error=true;
         }
         isGenerating = false;
         isAutoGenerating = false; // 最後に必ずリセット
@@ -538,6 +658,10 @@ function getImageSizeParams() {
         });
         pulseRing.style.borderColor = 'transparent';
         //pulseRing.style.boxShadow = 'none';
+        
+        // エラー状態もリセット
+        resetErrorCounter();
+        isInErrorRecovery = false;
       });
 
       // ステータスを更新する関数
