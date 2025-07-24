@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 生成ファイル
+userdata/
+*.wav
+*.mp3
+*.png
+!static/*.png
+
+# ログ
+*.log
+
+# 設定ファイル
+.env
+config.json
+
+# 一時ファイル
+temp/
+tmp/

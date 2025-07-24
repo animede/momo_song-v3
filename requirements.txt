@@ -1,0 +1,7 @@
+fastapi
+uvicorn[standard]
+openai
+Pillow
+requests
+asyncio-timeout
+python-multipart
