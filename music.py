@@ -209,7 +209,7 @@ def convert_genre_to_text(genre_data):
     return "\n".join(result)
 
 # ++++++++++++++++++++++++　歌の生成　+++++++++++++++++++++++
-def generate_song(jeson_song: dict,infer_step: int = 27,guidance_scale: float = 15,omega_scale: float = 10, no_vocal: bool = False):
+def generate_song(jeson_song: dict,infer_step: int = 27,guidance_scale: float = 15,omega_scale: float = 10, no_vocal: bool = False, audio_duration: int = -1):
     # JSON 文字列化
     print("======>>>>>jeson_song=",jeson_song)
     print(f"======>>>>>no_vocal parameter={no_vocal}")
@@ -254,7 +254,7 @@ def generate_song(jeson_song: dict,infer_step: int = 27,guidance_scale: float = 
     
     # APIに送信するデータの準備（ACE-Step-directAPI標準形式）
     data = {
-        "audio_duration": 60.0,  # 固定値に変更（-1はエラーの原因）
+        "audio_duration": audio_duration,  # フロントエンドから設定可能に変更
         "genre": genre,
         "infer_step": infer_step,
         "lyrics": lyrics,
@@ -446,7 +446,7 @@ def call_ace_api(data, no_vocal=False):
         # ACE-Step-directAPI用のJSONリクエスト形式
         json_data = {
             "format": "wav",
-            "audio_duration": 60.0 if data.get("audio_duration", -1) == -1 else data["audio_duration"],  # -1の場合60秒に設定
+            "audio_duration": data["audio_duration"],  # フロントエンドから設定されたデフォルト-1を使用
             "prompt": data["genre"],  # genreをpromptとして使用
             "lyrics": data["lyrics"],
             "infer_step": data["infer_step"],

@@ -120,6 +120,13 @@
                       oninput="document.getElementById('omega_scale_value').textContent = this.value" />
                     <span id="omega_scale_value">10</span>
                   </div>
+                  <div class="slider-item">
+                    <label for="audio_duration">音楽の長さ（秒）</label>
+                    <input type="range" id="audio_duration" name="audio_duration"
+                      min="-1" max="180" step="1" value="-1"
+                      oninput="updateAudioDurationValue(this.value)" />
+                    <span id="audio_duration_value">自動</span>
+                  </div>
                 </div>
                 <div class="form-item display-params" style="margin-top: 10px;">
                   <strong>表示パラメータ</strong>
@@ -190,6 +197,16 @@
 
       // ページ読み込み時に初期状態を設定
       updateVocalStatus();
+
+      // 音楽の長さ表示を更新する関数
+      function updateAudioDurationValue(value) {
+        const display = document.getElementById('audio_duration_value');
+        if (value == -1) {
+          display.textContent = '自動';
+        } else {
+          display.textContent = value + '秒';
+        }
+      }
 
       // 再生・画像アップデート用のキュー
       const playQueue = [];
@@ -535,6 +552,7 @@ function getImageSizeParams() {
           formData.append('infer_step', document.getElementById('infer_step').value);
           formData.append('guidance_scale', document.getElementById('guidance_scale').value);
           formData.append('omega_scale', document.getElementById('omega_scale').value);
+          formData.append('audio_duration', document.getElementById('audio_duration').value);
           formData.append('music_world', data_music_world);
           formData.append('height', height);
           formData.append('width', width);

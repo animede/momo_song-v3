@@ -55,17 +55,19 @@ async def generate_music(request: Request,
                          music_world: str = Form(...),
                          height: int = Form(976),
                          width: int = Form(1296),
-                         no_vocal: bool = Form(False)):
+                         no_vocal: bool = Form(False),
+                         audio_duration: int = Form(-1)):
     music_world = json.loads(music_world.replace(" ", ""))
     print("music_world=",music_world)
     lyrics_dict = json.loads(lyrics_dict.replace(" ", ""))
     print("lyrics_dict=",lyrics_dict)
     print(f"no_vocal parameter received: {no_vocal}")
+    print(f"audio_duration parameter received: {audio_duration}")
     # ① 音楽生成の結果を取得
     #generate_song から bytes が返ってくる想定
     # 並列処理で音楽と画像を生成
     try:
-        audio_task = asyncio.to_thread(generate_song, lyrics_dict, infer_step, guidance_scale, gomega_scale, no_vocal)
+        audio_task = asyncio.to_thread(generate_song, lyrics_dict, infer_step, guidance_scale, gomega_scale, no_vocal, audio_duration)
         image_task = create_image(sdxl_url, a_client, music_world, "text2image", "t2i",height,width)
         audio_bytes, pil_image = await asyncio.gather(audio_task, image_task)
         
