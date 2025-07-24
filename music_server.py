@@ -7,6 +7,7 @@ from openai_chat import  AsyncOpenAI
 from create_image_world import create_image
 from music import music_generation, generate_song
 import asyncio
+from PIL import Image, ImageDraw, ImageFont
 
 app = FastAPI()
 app.mount('/static', StaticFiles(directory='static'), name='static')
@@ -63,12 +64,48 @@ async def generate_music(request: Request,
     # ① 音楽生成の結果を取得
     #generate_song から bytes が返ってくる想定
     # 並列処理で音楽と画像を生成
-    audio_task = asyncio.to_thread(generate_song, lyrics_dict, infer_step, guidance_scale, gomega_scale, no_vocal)
-    image_task = create_image(sdxl_url, a_client, music_world, "text2image", "t2i",height,width)
-    audio_bytes, pil_image = await asyncio.gather(audio_task, image_task)
-    buf = io.BytesIO()
-    pil_image.save(buf, format='PNG')
-    image_base64 = 'data:image/png;base64,' + __import__('base64').b64encode(buf.getvalue()).decode()
+    try:
+        audio_task = asyncio.to_thread(generate_song, lyrics_dict, infer_step, guidance_scale, gomega_scale, no_vocal)
+        image_task = create_image(sdxl_url, a_client, music_world, "text2image", "t2i",height,width)
+        audio_bytes, pil_image = await asyncio.gather(audio_task, image_task)
+        
+        # 画像生成に失敗した場合のフォールバック処理
+        if pil_image is None:
+            # デフォルト画像を作成またはプレースホルダー画像を使用
+            from PIL import Image, ImageDraw, ImageFont
+            pil_image = Image.new('RGB', (width, height), color=(100, 150, 200))
+            draw = ImageDraw.Draw(pil_image)
+            
+            # フォントサイズを動的に調整
+            font_size = min(width, height) // 20
+            try:
+                # デフォルトフォントを使用
+                font = ImageFont.load_default()
+            except:
+                font = None
+            
+            text = "♪ Generated Music ♪"
+            # テキストを中央に配置
+            if font:
+                bbox = draw.textbbox((0, 0), text, font=font)
+                text_width = bbox[2] - bbox[0]
+                text_height = bbox[3] - bbox[1]
+            else:
+                text_width = len(text) * 10  # 大まかな推定
+                text_height = 20
+            
+            x = (width - text_width) // 2
+            y = (height - text_height) // 2
+            draw.text((x, y), text, fill=(255, 255, 255), font=font)
+            print("デフォルト画像を生成しました")
+        
+        buf = io.BytesIO()
+        pil_image.save(buf, format='PNG')
+        image_base64 = 'data:image/png;base64,' + __import__('base64').b64encode(buf.getvalue()).decode()
+        
+    except Exception as e:
+        print(f"音楽・画像生成中にエラーが発生しました: {e}")
+        return JSONResponse({'err': f'音楽・画像生成に失敗しました: {str(e)}'}, status_code=500)
     # ④ 音声も Base64 にエンコード（Data URI スキーム）
     audio_base64 = 'data:audio/mp3;base64,' + base64.b64encode(audio_bytes).decode()
     # ⑤ JSON でまとめて返却

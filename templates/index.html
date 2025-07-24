@@ -603,8 +603,16 @@ function getImageSizeParams() {
             scheduleErrorRecovery();
           } else {
             // 手動生成時は従来通りエラー表示
-            alert(err.message);
-            updateStatus('作曲が上手くできませんでした。言葉を変えて再度お試しください。');
+            let errorMessage = '作曲が上手くできませんでした。';
+            if (err.message && err.message.includes('generate_image')) {
+              errorMessage += ' 画像生成サーバが利用できません。音楽のみ生成を試してください。';
+            } else if (err.message && err.message.includes('generate_song')) {
+              errorMessage += ' 音楽生成サーバが利用できません。設定を確認してください。';
+            } else {
+              errorMessage += ' 言葉を変えて再度お試しください。';
+            }
+            alert(errorMessage);
+            updateStatus(errorMessage);
             spinner.style.display = 'none';
             isGenerating = false;
             isAutoGenerating = false; // ★ここで必ずリセット

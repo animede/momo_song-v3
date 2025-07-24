@@ -54,12 +54,16 @@ async def create_image(url,a_client,text, mode, generate_mode,height,width, num_
             np2=False,#negative_prompt_2は使わない
             pt2=True,#prompt_2は使う
             gen_mode="t2i"#画像生成モードはi2i
-            image= await generate_image(url,pt2,np2,gen_mode,prompt,prompt_2,negative_prompt,negative_prompt_2,height,width,num_inference_steps=num_inference_steps,guidance_scale=guidance_scale)
-            # 画像オブジェクトを直接返す
-            return image
+            try:
+                image= await generate_image(url,pt2,np2,gen_mode,prompt,prompt_2,negative_prompt,negative_prompt_2,height,width,num_inference_steps=num_inference_steps,guidance_scale=guidance_scale)
+                # 画像オブジェクトを直接返す
+                return image
+            except Exception as e:
+                print(f"画像生成中にエラーが発生しました: {e}")
+                return None
     else:
             print("Invalid response format")
-            return {"result": "No image generated"}
+            return None
 
 async def generate_image(url,pt2,np2,gen_mode,prompt,prompt_2,negative_prompt,negative_prompt_2,height,width,num_inference_steps=20,guidance_scale=8.0):
     # 汎用画像生成のためのリクエストを作成
@@ -95,18 +99,30 @@ async def generate_image(url,pt2,np2,gen_mode,prompt,prompt_2,negative_prompt,ne
     }
 
     image = await request_imag(url,data)
-    return image[0]
+    if image and len(image) > 0:
+        return image[0]
+    else:
+        # 画像生成に失敗した場合はデフォルト画像またはNoneを返す
+        print("画像生成に失敗しました。デフォルト動作に切り替えます。")
+        return None
 
 # API サーバrequest モジュール
 async def request_imag(url,data,files=None):
-    response = requests.post(url +"/generate/", data=data ,files=files) # POSTリクエストを送信
-    print(response)
-    # レスポンスを表示 
-    if response.status_code == 200:
-        print("get data OK")
-        image_data = response.content
-        image =(pickle.loads(image_data))#元の形式にpickle.loadsで復元
-    else:
-        image=[]
-        print("リクエストが失敗しました。ステータスコード:", response.status_code)
-    return  image
+    try:
+        response = requests.post(url +"/generate/", data=data ,files=files, timeout=30) # POSTリクエストを送信
+        print(response)
+        # レスポンスを表示 
+        if response.status_code == 200:
+            print("get data OK")
+            image_data = response.content
+            image =(pickle.loads(image_data))#元の形式にpickle.loadsで復元
+            return image
+        else:
+            print("リクエストが失敗しました。ステータスコード:", response.status_code)
+            return []
+    except requests.exceptions.RequestException as e:
+        print(f"画像生成サーバへの接続に失敗しました: {e}")
+        return []
+    except Exception as e:
+        print(f"画像生成中にエラーが発生しました: {e}")
+        return []
